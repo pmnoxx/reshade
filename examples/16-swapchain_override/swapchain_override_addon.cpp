@@ -65,6 +65,34 @@ static bool on_create_swapchain(reshade::api::device_api, reshade::api::swapchai
 	{
 		reshade::set_config_value(nullptr, "APP", "Force10BitFormat", "0");
 	}
+	
+	if (bool force_12bit_format;
+		reshade::get_config_value(nullptr, "APP", "Force12BitFormat", force_12bit_format))
+	{
+		if (force_12bit_format)
+		{
+			desc.back_buffer.texture.format = reshade::api::format::r11g11b10_float;
+			modified = true;
+		}
+	} 
+	else
+	{
+		reshade::set_config_value(nullptr, "APP", "Force12BitFormat", "0");
+	}
+
+	if (bool force_16bit_format;
+		reshade::get_config_value(nullptr, "APP", "Force16BitFormat", force_16bit_format))
+	{
+		if (force_16bit_format)
+		{
+			desc.back_buffer.texture.format = reshade::api::format::r16g16b16a16_float;
+			modified = true;
+		}
+	}
+	else
+	{
+		reshade::set_config_value(nullptr, "APP", "Force16BitFormat", "0");
+	}
 
 	if (bool force_default_refresh_rate;
 		reshade::get_config_value(nullptr, "APP", "ForceDefaultRefreshRate", force_default_refresh_rate))
@@ -132,6 +160,7 @@ extern "C" __declspec(dllexport) const char *DESCRIPTION = "Adds options to forc
 	"ForceWindowed=<0/1>\n"
 	"ForceFullscreen=<0/1>\n"
 	"Force10BitFormat=<0/1>\n"
+	"Force16BitFormat=<0/1>\n"
 	"ForceDefaultRefreshRate=<0/1>\n"
 	"ForceResolution=<width>,<height>";
 
