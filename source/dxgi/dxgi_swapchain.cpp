@@ -297,7 +297,10 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetDevice(REFIID riid, void **ppDevice)
 
 HRESULT STDMETHODCALLTYPE DXGISwapChain::Present(UINT SyncInterval, UINT Flags)
 {
-	on_present(Flags);
+	if (on_present(SyncInterval, Flags))
+	{
+		return S_OK; // Pretend it was successful
+	}
 
 #if RESHADE_ADDON
 	if (_sync_interval != UINT_MAX)
@@ -574,7 +577,10 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetCoreWindow(REFIID refiid, void **ppU
 }
 HRESULT STDMETHODCALLTYPE DXGISwapChain::Present1(UINT SyncInterval, UINT PresentFlags, const DXGI_PRESENT_PARAMETERS *pPresentParameters)
 {
-	on_present(PresentFlags, pPresentParameters);
+	if (on_present(SyncInterval, PresentFlags, pPresentParameters))
+	{
+		return S_OK; // Pretend it was successful
+	}
 
 #if RESHADE_ADDON
 	if (_sync_interval != UINT_MAX)
@@ -935,16 +941,16 @@ void DXGISwapChain::on_reset([[maybe_unused]] bool resize)
 	_is_initialized = false;
 }
 
-void DXGISwapChain::on_present(UINT flags, [[maybe_unused]] const DXGI_PRESENT_PARAMETERS *params)
+bool DXGISwapChain::on_present(UINT &sync_interval, UINT &flags, [[maybe_unused]] const DXGI_PRESENT_PARAMETERS *params)
 {
 	// Some D3D11 games test presentation for timing and composition purposes
 	// These calls are not rendering related, but rather a status request for the D3D runtime and as such should be ignored
 	if ((flags & DXGI_PRESENT_TEST) != 0)
-		return;
+		return false;
 
 	// Also skip when the same frame is presented multiple times
 	if ((flags & DXGI_PRESENT_DO_NOT_WAIT) != 0 && _was_still_drawing_last_frame)
-		return;
+		return false;
 	assert(!_was_still_drawing_last_frame);
 
 	assert(_is_initialized);
@@ -969,7 +975,9 @@ void DXGISwapChain::on_present(UINT flags, [[maybe_unused]] const DXGI_PRESENT_P
 			nullptr,
 			nullptr,
 			params != nullptr ? params->DirtyRectsCount : 0,
-			params != nullptr ? reinterpret_cast<const reshade::api::rect *>(params->pDirtyRects) : nullptr);
+			params != nullptr ? reinterpret_cast<const reshade::api::rect *>(params->pDirtyRects) : nullptr,
+			&sync_interval,
+			&flags);
 #endif
 		reshade::present_effect_runtime(_impl);
 		break;
@@ -985,7 +993,9 @@ void DXGISwapChain::on_present(UINT flags, [[maybe_unused]] const DXGI_PRESENT_P
 			nullptr,
 			nullptr,
 			params != nullptr ? params->DirtyRectsCount : 0,
-			params != nullptr ? reinterpret_cast<const reshade::api::rect *>(params->pDirtyRects) : nullptr);
+			params != nullptr ? reinterpret_cast<const reshade::api::rect *>(params->pDirtyRects) : nullptr,
+			&sync_interval,
+			&flags);
 #endif
 		reshade::present_effect_runtime(_impl);
 		break;
@@ -997,12 +1007,15 @@ void DXGISwapChain::on_present(UINT flags, [[maybe_unused]] const DXGI_PRESENT_P
 			nullptr,
 			nullptr,
 			params != nullptr ? params->DirtyRectsCount : 0,
-			params != nullptr ? reinterpret_cast<const reshade::api::rect *>(params->pDirtyRects) : nullptr);
+			params != nullptr ? reinterpret_cast<const reshade::api::rect *>(params->pDirtyRects) : nullptr,
+			&sync_interval,
+			&flags);
 #endif
 		reshade::present_effect_runtime(_impl);
 		static_cast<D3D12CommandQueue *>(_direct3d_command_queue)->flush_immediate_command_list();
 		break;
 	}
+	return false;
 }
 
 void DXGISwapChain::on_finish_present(HRESULT hr)

@@ -39,7 +39,7 @@ struct DECLSPEC_UUID("BC52FCE4-1EAC-40C8-84CF-863600BBAA01") Direct3DSwapChain9 
 
 	void on_init([[maybe_unused]] bool resize);
 	void on_reset([[maybe_unused]] bool resize);
-	void on_present(const RECT *source_rect, [[maybe_unused]] const RECT *dest_rect, HWND window_override, [[maybe_unused]] const RGNDATA *dirty_region, DWORD flags);
+	bool on_present(const RECT *source_rect, [[maybe_unused]] const RECT *dest_rect, HWND window_override, [[maybe_unused]] const RGNDATA *dirty_region, DWORD *flags = nullptr);
 	void on_finish_present(HRESULT hr);
 
 	bool check_and_upgrade_interface(REFIID riid);

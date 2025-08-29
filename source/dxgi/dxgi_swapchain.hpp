@@ -85,7 +85,7 @@ struct DECLSPEC_UUID("1F445F9F-9887-4C4C-9055-4E3BADAFCCA8") DXGISwapChain final
 
 	void on_init([[maybe_unused]] bool resize);
 	void on_reset([[maybe_unused]] bool resize);
-	void on_present(UINT flags, [[maybe_unused]] const DXGI_PRESENT_PARAMETERS *params = nullptr);
+	bool on_present(UINT &sync_interval, UINT &flags, [[maybe_unused]] const DXGI_PRESENT_PARAMETERS *params = nullptr);
 	void on_finish_present(HRESULT hr);
 
 	bool check_and_upgrade_interface(REFIID riid);

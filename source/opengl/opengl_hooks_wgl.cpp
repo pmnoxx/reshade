@@ -262,7 +262,7 @@ public:
 		// Behave as if immediate command list is flushed
 		reshade::invoke_addon_event<reshade::addon_event::execute_command_list>(context, context);
 
-		reshade::invoke_addon_event<reshade::addon_event::present>(context, this, nullptr, nullptr, 0, nullptr);
+		reshade::invoke_addon_event<reshade::addon_event::present>(context, this, nullptr, nullptr, 0, nullptr, nullptr, nullptr);
 #endif
 
 		// Assume that the correct OpenGL context is still current here
@@ -1294,9 +1294,12 @@ extern "C" BOOL  WINAPI wglSwapBuffers(HDC hdc)
 				});
 			swapchain_it != s_opengl_swapchains.end())
 		{
-			if ((*swapchain_it)->on_present(g_opengl_context))
-				swapchain = *swapchain_it;
+					if ((*swapchain_it)->on_present(g_opengl_context))
+		{
+			return TRUE; // Pretend it was successful
 		}
+		swapchain = *swapchain_it;
+	}
 	}
 
 	static const auto trampoline = reshade::hooks::call(wglSwapBuffers);
