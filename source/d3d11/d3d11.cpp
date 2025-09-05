@@ -9,6 +9,7 @@
 #include "dll_log.hpp" // Include late to get 'hr_to_string' helper function
 #include "hook_manager.hpp"
 #include "addon_manager.hpp"
+#include <d3d11sdklayers.h> // For D3D debug layer interfaces
 
 extern thread_local bool g_in_dxgi_runtime;
 
@@ -44,6 +45,7 @@ extern "C" HRESULT WINAPI D3D11CreateDeviceAndSwapChain(IDXGIAdapter *pAdapter, 
 	// Remove flag that prevents turning on the debug layer
 	Flags &= ~D3D11_CREATE_DEVICE_PREVENT_ALTERING_LAYER_SETTINGS_FROM_REGISTRY;
 #endif
+	Flags &= ~D3D11_CREATE_DEVICE_PREVENT_ALTERING_LAYER_SETTINGS_FROM_REGISTRY;
 
 #if RESHADE_ADDON >= 2
 	if (ppDevice != nullptr)
@@ -100,7 +102,50 @@ extern "C" HRESULT WINAPI D3D11CreateDeviceAndSwapChain(IDXGIAdapter *pAdapter, 
 		return hr;
 	}
 
+	// Configure D3D debug layer for verbose output
+//	if (Flags & D3D11_CREATE_DEVICE_DEBUG)
+
 	auto device = *ppDevice;
+	{
+		// Get InfoQueue from ID3D11Debug interface (not from IDXGIDevice1)
+		com_ptr<ID3D11Debug> debug_device;
+		if (SUCCEEDED(device->QueryInterface(&debug_device)))
+		{
+			com_ptr<ID3D11InfoQueue> info_queue;
+			if (SUCCEEDED(debug_device->QueryInterface(&info_queue)))
+			{
+				// Enable all message severity levels
+				info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, FALSE);
+				info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, FALSE);
+				info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_WARNING, FALSE);
+				info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_INFO, FALSE);
+				info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_MESSAGE, FALSE);
+
+				// Set message severity levels to show all messages
+				D3D11_MESSAGE_SEVERITY severities[] = {
+					D3D11_MESSAGE_SEVERITY_CORRUPTION,
+					D3D11_MESSAGE_SEVERITY_ERROR,
+					D3D11_MESSAGE_SEVERITY_WARNING,
+					D3D11_MESSAGE_SEVERITY_INFO,
+					D3D11_MESSAGE_SEVERITY_MESSAGE
+				};
+
+				D3D11_INFO_QUEUE_FILTER filter = {};
+				filter.AllowList.NumSeverities = ARRAYSIZE(severities);
+				filter.AllowList.pSeverityList = severities;
+
+				// Use AddStorageFilterEntries instead of PushStorageFilter
+				info_queue->AddStorageFilterEntries(&filter);
+
+				reshade::log::message(reshade::log::level::info, "TTTTTTT D3D debug layer configured for verbose output.");
+			} else {
+				reshade::log::message(reshade::log::level::info, "TTTTTTT Failed to get ID3D11InfoQueue interface.");
+			}
+		} else {
+			reshade::log::message(reshade::log::level::info, "TTTTTTT Failed to get ID3D11Debug interface.");
+		}
+	}
+
 	// Query for the DXGI device and immediate device context since we need to reference them in the proxy device
 	com_ptr<IDXGIDevice1> dxgi_device;
 	hr = device->QueryInterface(&dxgi_device);
@@ -167,6 +212,45 @@ extern "C" HRESULT WINAPI D3D11CreateDeviceAndSwapChain(IDXGIAdapter *pAdapter, 
 				static_cast<IDXGIDevice1 *>(device_proxy), static_cast<DXGIDevice *>(device_proxy)->_orig);
 #endif
 			*ppDevice = device_proxy;
+			{
+				// Get InfoQueue from ID3D11Debug interface (not from IDXGIDevice1)
+				com_ptr<ID3D11Debug> debug_device;
+				if (SUCCEEDED(device_proxy->_orig->QueryInterface(&debug_device)))
+				{
+					com_ptr<ID3D11InfoQueue> info_queue;
+					if (SUCCEEDED(debug_device->QueryInterface(&info_queue)))
+					{
+						// Enable all message severity levels
+						info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, FALSE);
+						info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, FALSE);
+						info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_WARNING, FALSE);
+						info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_INFO, FALSE);
+						info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_MESSAGE, FALSE);
+
+						// Set message severity levels to show all messages
+						D3D11_MESSAGE_SEVERITY severities[] = {
+							D3D11_MESSAGE_SEVERITY_CORRUPTION,
+							D3D11_MESSAGE_SEVERITY_ERROR,
+							D3D11_MESSAGE_SEVERITY_WARNING,
+							D3D11_MESSAGE_SEVERITY_INFO,
+							D3D11_MESSAGE_SEVERITY_MESSAGE
+						};
+
+						D3D11_INFO_QUEUE_FILTER filter = {};
+						filter.AllowList.NumSeverities = ARRAYSIZE(severities);
+						filter.AllowList.pSeverityList = severities;
+
+						// Use AddStorageFilterEntries instead of PushStorageFilter
+						info_queue->AddStorageFilterEntries(&filter);
+
+						reshade::log::message(reshade::log::level::info, "D3D debug layer configured for verbose output.");
+					} else {
+						reshade::log::message(reshade::log::level::info, "Failed to get ID3D11InfoQueue interface.");
+					}
+				} else {
+					reshade::log::message(reshade::log::level::info, "Failed to get ID3D11Debug interface.");
+				}
+			}
 		}
 
 		if (ppImmediateContext != nullptr)

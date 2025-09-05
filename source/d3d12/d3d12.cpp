@@ -8,6 +8,7 @@
 #include "com_utils.hpp"
 #include "hook_manager.hpp"
 #include "addon_manager.hpp"
+#include <d3d12sdklayers.h> // For D3D12 debug layer interfaces
 
 std::shared_mutex g_adapter_mutex;
 
@@ -61,6 +62,39 @@ extern "C" HRESULT WINAPI D3D12CreateDevice(IUnknown *pAdapter, D3D_FEATURE_LEVE
 
 	// The returned device should alway implement the 'ID3D12Device' base interface
 	const auto device = static_cast<ID3D12Device *>(*ppDevice);
+
+	// Configure D3D12 debug layer for verbose output
+	com_ptr<ID3D12Debug> debug;
+	if (SUCCEEDED(device->QueryInterface(&debug)))
+	{
+		com_ptr<ID3D12InfoQueue> info_queue;
+		if (SUCCEEDED(debug->QueryInterface(&info_queue)))
+		{
+			// Enable all message severity levels
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, TRUE);
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, TRUE);
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, TRUE);
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_INFO, TRUE);
+			info_queue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_MESSAGE, TRUE);
+
+			// Set message severity levels to show all messages
+			D3D12_MESSAGE_SEVERITY severities[] = {
+				D3D12_MESSAGE_SEVERITY_CORRUPTION,
+				D3D12_MESSAGE_SEVERITY_ERROR,
+				D3D12_MESSAGE_SEVERITY_WARNING,
+				D3D12_MESSAGE_SEVERITY_INFO,
+				D3D12_MESSAGE_SEVERITY_MESSAGE
+			};
+
+			D3D12_INFO_QUEUE_FILTER filter = {};
+			filter.AllowList.NumSeverities = ARRAYSIZE(severities);
+			filter.AllowList.pSeverityList = severities;
+
+			info_queue->AddStorageFilterEntries(&filter);
+
+			reshade::log::message(reshade::log::level::info, "D3D12 debug layer configured for verbose output.");
+		}
+	}
 
 	// Direct3D 12 devices are singletons per adapter, so first check if one was already created previously
 	const auto device_proxy_existing = get_private_pointer_d3dx<D3D12Device>(device);

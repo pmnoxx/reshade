@@ -30,3 +30,6 @@
 [submodule "openxr"]
 	path = deps/openxr
 	url = https://github.com/KhronosGroup/OpenXR-SDK.git
+[submodule "deps/specialk"]
+	path = deps/specialk
+	url = https://github.comSpecialKO/SpecialK.git

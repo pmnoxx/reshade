@@ -623,77 +623,21 @@ extern "C" HRESULT WINAPI CreateDXGIFactory(REFIID riid, void **ppFactory)
 {
 #if RESHADE_VERBOSE_LOG
 	reshade::log::message(reshade::log::level::info, "Redirecting CreateDXGIFactory(riid = %s, ppFactory = %p) ...", reshade::log::iid_to_string(riid).c_str(), ppFactory);
-	reshade::log::message(reshade::log::level::info, "> Passing on to CreateDXGIFactory1:");
+	reshade::log::message(reshade::log::level::info, "> Passing on to CreateDXGIFactory2:");
 #endif
 
-	// DXGI 1.1 should always be available, so to simplify code just call 'CreateDXGIFactory' which is otherwise identical
-	return CreateDXGIFactory1(riid, ppFactory);
+	// Redirect through CreateDXGIFactory2 to ensure DXGI_CREATE_FACTORY_DEBUG is always passed
+    UINT	Flags = DXGI_CREATE_FACTORY_DEBUG;
+	return CreateDXGIFactory2(Flags, riid, ppFactory);
 }
 extern "C" HRESULT WINAPI CreateDXGIFactory1(REFIID riid, void **ppFactory)
 {
 	reshade::log::message(reshade::log::level::info, "Redirecting CreateDXGIFactory1(riid = %s, ppFactory = %p) ...", reshade::log::iid_to_string(riid).c_str(), ppFactory);
+	reshade::log::message(reshade::log::level::info, "> Passing on to CreateDXGIFactory2:");
 
-	const HRESULT hr = reshade::hooks::call(CreateDXGIFactory1)(riid, ppFactory);
-	if (FAILED(hr))
-	{
-		reshade::log::message(reshade::log::level::warning, "CreateDXGIFactory1 failed with error code %s.", reshade::log::hr_to_string(hr).c_str());
-		return hr;
-	}
-
-	// The returned factory should alway implement the 'IDXGIFactory' base interface
-	const auto factory = static_cast<IDXGIFactory *>(*ppFactory);
-
-	// Have to use vtable hooks when Ubisoft Connect in-game overlay is loaded, because it installs hooks on the vtable entries of every factory returned,
-	// but those hooks always call back to the original functions of the last factory returned. So if an application first creates its own factory and then an internal one is created by D3D12,
-	// any calls the application is doing end up redirected to the vtable entries of the internal factory. Should that first factory be proxied, but the internal one not, then the call chain gets messed up and things crash.
-#ifndef _WIN64
-	if (GetModuleHandleW(L"overlay.dll") != nullptr)
-#else
-	if (GetModuleHandleW(L"overlay64.dll") != nullptr)
-#endif
-	{
-		reshade::hooks::install("IDXGIFactory::CreateSwapChain", reshade::hooks::vtable_from_instance(factory), 10, &IDXGIFactory_CreateSwapChain);
-
-		// Check for DXGI 1.2 support and install 'IDXGIFactory2' hooks if it exists
-		if (com_ptr<IDXGIFactory2> factory2;
-			SUCCEEDED(factory->QueryInterface(&factory2)))
-		{
-			reshade::hooks::install("IDXGIFactory2::CreateSwapChainForHwnd", reshade::hooks::vtable_from_instance(factory2.get()), 15, &IDXGIFactory2_CreateSwapChainForHwnd);
-			reshade::hooks::install("IDXGIFactory2::CreateSwapChainForCoreWindow", reshade::hooks::vtable_from_instance(factory2.get()), 16, &IDXGIFactory2_CreateSwapChainForCoreWindow);
-			reshade::hooks::install("IDXGIFactory2::CreateSwapChainForComposition", reshade::hooks::vtable_from_instance(factory2.get()), 24, &IDXGIFactory2_CreateSwapChainForComposition);
-		}
-	}
-	// External hooks may create a DXGI factory and rewrite the vtable, so prefer proxy, to ensure ReShade gets called first
-	else if (!g_in_dxgi_runtime)
-	{
-		const auto factory_proxy = new DXGIFactory(factory);
-
-		// Upgrade to the actual interface version requested here
-		if (factory_proxy->check_and_upgrade_interface(riid))
-		{
-#if RESHADE_VERBOSE_LOG
-			reshade::log::message(
-				reshade::log::level::debug,
-				"Returning IDXGIFactory%hu object %p (%p).",
-				factory_proxy->_interface_version, factory_proxy, factory_proxy->_orig);
-#endif
-			*ppFactory = factory_proxy;
-
-			return hr;
-		}
-		else // Do not hook object if we do not support the requested interface
-		{
-			reshade::log::message(reshade::log::level::warning, "Unknown interface %s in CreateDXGIFactory1.", reshade::log::iid_to_string(riid).c_str());
-
-			delete factory_proxy; // Delete instead of release to keep reference count untouched
-		}
-	}
-
-#if RESHADE_VERBOSE_LOG
-	reshade::log::message(reshade::log::level::debug, "Returning IDXGIFactory object %p.", factory);
-#endif
-
-	return hr;
+	// Redirect through CreateDXGIFactory2 to ensure DXGI_CREATE_FACTORY_DEBUG is always passed
+    UINT	Flags = DXGI_CREATE_FACTORY_DEBUG;
+	return CreateDXGIFactory2(Flags, riid, ppFactory);
 }
 extern "C" HRESULT WINAPI CreateDXGIFactory2(UINT Flags, REFIID riid, void **ppFactory)
 {
@@ -706,11 +650,76 @@ extern "C" HRESULT WINAPI CreateDXGIFactory2(UINT Flags, REFIID riid, void **ppF
 
 	// CreateDXGIFactory2 is not available on Windows 7, so fall back to CreateDXGIFactory1 if the application calls it
 	// This needs to happen because some applications only check if CreateDXGIFactory2 exists, which is always the case if they load ReShade, to decide whether to call it or CreateDXGIFactory1
+
+	Flags |= DXGI_CREATE_FACTORY_DEBUG;
+
+
 	if (trampoline == nullptr)
 	{
-		reshade::log::message(reshade::log::level::info, "> Passing on to CreateDXGIFactory1:");
+		reshade::log::message(reshade::log::level::info, "> Passing on to CreateDXGIFactory1 (Windows 7 fallback):");
 
-		return CreateDXGIFactory1(riid, ppFactory);
+		// On Windows 7, fall back to the original CreateDXGIFactory1 implementation
+		const HRESULT hr = reshade::hooks::call(CreateDXGIFactory1)(riid, ppFactory);
+		if (FAILED(hr))
+		{
+			reshade::log::message(reshade::log::level::warning, "CreateDXGIFactory1 failed with error code %s.", reshade::log::hr_to_string(hr).c_str());
+			return hr;
+		}
+
+		// The returned factory should alway implement the 'IDXGIFactory' base interface
+		const auto factory = static_cast<IDXGIFactory *>(*ppFactory);
+
+		// Have to use vtable hooks when Ubisoft Connect in-game overlay is loaded, because it installs hooks on the vtable entries of every factory returned,
+		// but those hooks always call back to the original functions of the last factory returned. So if an application first creates its own factory and then an internal one is created by D3D12,
+		// any calls the application is doing end up redirected to the vtable entries of the internal factory. Should that first factory be proxied, but the internal one not, then the call chain gets messed up and things crash.
+#ifndef _WIN64
+		if (GetModuleHandleW(L"overlay.dll") != nullptr)
+#else
+		if (GetModuleHandleW(L"overlay64.dll") != nullptr)
+#endif
+		{
+			reshade::hooks::install("IDXGIFactory::CreateSwapChain", reshade::hooks::vtable_from_instance(factory), 10, &IDXGIFactory_CreateSwapChain);
+
+			// Check for DXGI 1.2 support and install 'IDXGIFactory2' hooks if it exists
+			if (com_ptr<IDXGIFactory2> factory2;
+				SUCCEEDED(factory->QueryInterface(&factory2)))
+			{
+				reshade::hooks::install("IDXGIFactory2::CreateSwapChainForHwnd", reshade::hooks::vtable_from_instance(factory2.get()), 15, &IDXGIFactory2_CreateSwapChainForHwnd);
+				reshade::hooks::install("IDXGIFactory2::CreateSwapChainForCoreWindow", reshade::hooks::vtable_from_instance(factory2.get()), 16, &IDXGIFactory2_CreateSwapChainForCoreWindow);
+				reshade::hooks::install("IDXGIFactory2::CreateSwapChainForComposition", reshade::hooks::vtable_from_instance(factory2.get()), 24, &IDXGIFactory2_CreateSwapChainForComposition);
+			}
+		}
+		// External hooks may create a DXGI factory and rewrite the vtable, so prefer proxy, to ensure ReShade gets called first
+		else if (!g_in_dxgi_runtime)
+		{
+			const auto factory_proxy = new DXGIFactory(factory);
+
+			// Upgrade to the actual interface version requested here
+			if (factory_proxy->check_and_upgrade_interface(riid))
+			{
+#if RESHADE_VERBOSE_LOG
+				reshade::log::message(
+					reshade::log::level::debug,
+					"Returning IDXGIFactory%hu object %p (%p).",
+					factory_proxy->_interface_version, factory_proxy, factory_proxy->_orig);
+#endif
+				*ppFactory = factory_proxy;
+
+				return hr;
+			}
+			else // Do not hook object if we do not support the requested interface
+			{
+				reshade::log::message(reshade::log::level::warning, "Unknown interface %s in CreateDXGIFactory1.", reshade::log::iid_to_string(riid).c_str());
+
+				delete factory_proxy; // Delete instead of release to keep reference count untouched
+			}
+		}
+
+#if RESHADE_VERBOSE_LOG
+		reshade::log::message(reshade::log::level::debug, "Returning IDXGIFactory object %p.", factory);
+#endif
+
+		return hr;
 	}
 
 	// It is crucial that ReShade hooks this after the Steam overlay already hooked it, so that ReShade is called first and the Steam overlay is called through the trampoline below
@@ -731,6 +740,7 @@ extern "C" HRESULT WINAPI CreateDXGIFactory2(UINT Flags, REFIID riid, void **ppF
 	if (std::find(std::begin(iid_lookup), std::end(iid_lookup), riid) == std::end(iid_lookup))
 	{
 		hr = trampoline(Flags, riid, ppFactory); // Fall back in case of unknown (presumed higher) interface version
+
 	}
 	else
 	{
