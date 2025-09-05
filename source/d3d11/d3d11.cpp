@@ -24,6 +24,8 @@ extern "C" HRESULT WINAPI D3D11CreateDevice(IDXGIAdapter *pAdapter, D3D_DRIVER_T
 		pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, ppDevice, pFeatureLevel, ppImmediateContext);
 	reshade::log::message(reshade::log::level::info, "> Passing on to D3D11CreateDeviceAndSwapChain:");
 
+	Flags |= D3D11_CREATE_DEVICE_DEBUG;
+
 	// The D3D runtime does this internally anyway, so to avoid duplicate hooks, always pass on to D3D11CreateDeviceAndSwapChain
 	return D3D11CreateDeviceAndSwapChain(pAdapter, DriverType, Software, Flags, pFeatureLevels, FeatureLevels, SDKVersion, nullptr, nullptr, ppDevice, pFeatureLevel, ppImmediateContext);
 }
@@ -215,7 +217,7 @@ extern "C" HRESULT WINAPI D3D11CreateDeviceAndSwapChain(IDXGIAdapter *pAdapter, 
 			{
 				// Get InfoQueue from ID3D11Debug interface (not from IDXGIDevice1)
 				com_ptr<ID3D11Debug> debug_device;
-				if (SUCCEEDED(device_proxy->_orig->QueryInterface(&debug_device)))
+				if (SUCCEEDED(static_cast<ID3D11Device *>(device_proxy)->QueryInterface(&debug_device)))
 				{
 					com_ptr<ID3D11InfoQueue> info_queue;
 					if (SUCCEEDED(debug_device->QueryInterface(&info_queue)))
@@ -243,12 +245,12 @@ extern "C" HRESULT WINAPI D3D11CreateDeviceAndSwapChain(IDXGIAdapter *pAdapter, 
 						// Use AddStorageFilterEntries instead of PushStorageFilter
 						info_queue->AddStorageFilterEntries(&filter);
 
-						reshade::log::message(reshade::log::level::info, "D3D debug layer configured for verbose output.");
+						reshade::log::message(reshade::log::level::info, "TTTTTTT D3D debug layer configured for verbose output.");
 					} else {
-						reshade::log::message(reshade::log::level::info, "Failed to get ID3D11InfoQueue interface.");
+						reshade::log::message(reshade::log::level::info, "TTTTTTT Failed to get ID3D11InfoQueue interface.");
 					}
 				} else {
-					reshade::log::message(reshade::log::level::info, "Failed to get ID3D11Debug interface.");
+					reshade::log::message(reshade::log::level::info, "TTTTTTT Failed to get ID3D11Debug interface.");
 				}
 			}
 		}

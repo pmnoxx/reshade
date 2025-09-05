@@ -18,6 +18,48 @@ extern bool is_windows7();
 // Needs to be set whenever a DXGI call can end up in 'CDXGISwapChain::EnsureChildDeviceInternal', to avoid hooking internal D3D device creation
 extern thread_local bool g_in_dxgi_runtime;
 
+
+void add_info_queue_filter(ID3D11Device *pDevice, const char *tag)
+{
+	com_ptr<ID3D11Debug> debug_device;
+	if (SUCCEEDED(static_cast<ID3D11Device *>(pDevice)->QueryInterface(&debug_device)))
+	{
+		com_ptr<ID3D11InfoQueue> info_queue;
+		if (SUCCEEDED(debug_device->QueryInterface(&info_queue)))
+		{
+			// Enable all message severity levels
+			info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_CORRUPTION, FALSE);
+			info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_ERROR, FALSE);
+			info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_WARNING, FALSE);
+			info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_INFO, FALSE);
+			info_queue->SetBreakOnSeverity(D3D11_MESSAGE_SEVERITY_MESSAGE, FALSE);
+
+			// Set message severity levels to show all messages
+			D3D11_MESSAGE_SEVERITY severities[] = {
+				D3D11_MESSAGE_SEVERITY_CORRUPTION,
+				D3D11_MESSAGE_SEVERITY_ERROR,
+				D3D11_MESSAGE_SEVERITY_WARNING,
+				D3D11_MESSAGE_SEVERITY_INFO,
+				D3D11_MESSAGE_SEVERITY_MESSAGE
+			};
+
+			D3D11_INFO_QUEUE_FILTER filter = {};
+			filter.AllowList.NumSeverities = ARRAYSIZE(severities);
+			filter.AllowList.pSeverityList = severities;
+
+			// Use AddStorageFilterEntries instead of PushStorageFilter
+			info_queue->AddStorageFilterEntries(&filter);
+
+			reshade::log::message(reshade::log::level::info, "%s D3D debug layer configured for verbose output.", tag);
+		} else {
+			reshade::log::message(reshade::log::level::info, "%s Failed to get ID3D11InfoQueue interface.", tag);
+		}
+	} else {
+		reshade::log::message(reshade::log::level::info, "%s Failed to get ID3D11Debug interface.", tag);
+	}
+}
+
+
 #if RESHADE_ADDON
 static auto floating_point_to_rational(float value) -> DXGI_RATIONAL
 {
@@ -447,19 +489,25 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory_CreateSwapChain_Impl(IDXGIFactory *pFacto
 	}
 
 	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, *pDesc, modified);
+	{
+		add_info_queue_filter(static_cast<ID3D11Device *>(pDevice), "TTTTTTT3");
+	}
 
 	return hr;
 }
-
 HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForHwnd(IDXGIFactory2 *pFactory, IUnknown *pDevice, HWND hWnd, const DXGI_SWAP_CHAIN_DESC1 *pDesc, const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFullscreenDesc, IDXGIOutput *pRestrictToOutput, IDXGISwapChain1 **ppSwapChain)
 {
 	const auto trampoline = reshade::hooks::call(IDXGIFactory2_CreateSwapChainForHwnd, reshade::hooks::vtable_from_instance(pFactory) + 15);
 	assert(trampoline != nullptr);
 
-	if (g_in_dxgi_runtime)
-		return trampoline(pFactory, pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
-
-	return IDXGIFactory2_CreateSwapChainForHwnd_Impl(pFactory, pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain, trampoline);
+	if (g_in_dxgi_runtime) {
+		auto hr = trampoline(pFactory, pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain);
+		add_info_queue_filter(static_cast<ID3D11Device *>(pDevice), "TTTTTTT4");
+		return hr;
+	}
+	auto hr = IDXGIFactory2_CreateSwapChainForHwnd_Impl(pFactory, pDevice, hWnd, pDesc, pFullscreenDesc, pRestrictToOutput, ppSwapChain, trampoline);
+	add_info_queue_filter(static_cast<ID3D11Device *>(pDevice), "TTTTTTT5");
+	return hr;
 }
 HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForHwnd_Impl(IDXGIFactory2 *pFactory, IUnknown *pDevice, HWND hWnd, const DXGI_SWAP_CHAIN_DESC1 *pDesc, const DXGI_SWAP_CHAIN_FULLSCREEN_DESC *pFullscreenDesc, IDXGIOutput *pRestrictToOutput, IDXGISwapChain1 **ppSwapChain, decltype(&IDXGIFactory2_CreateSwapChainForHwnd) trampoline)
 {
@@ -641,6 +689,7 @@ extern "C" HRESULT WINAPI CreateDXGIFactory1(REFIID riid, void **ppFactory)
 }
 extern "C" HRESULT WINAPI CreateDXGIFactory2(UINT Flags, REFIID riid, void **ppFactory)
 {
+	Flags |= DXGI_CREATE_FACTORY_DEBUG;
 	reshade::log::message(
 		reshade::log::level::info,
 		"Redirecting CreateDXGIFactory2(Flags = %#x, riid = %s, ppFactory = %p) ...",
@@ -651,7 +700,6 @@ extern "C" HRESULT WINAPI CreateDXGIFactory2(UINT Flags, REFIID riid, void **ppF
 	// CreateDXGIFactory2 is not available on Windows 7, so fall back to CreateDXGIFactory1 if the application calls it
 	// This needs to happen because some applications only check if CreateDXGIFactory2 exists, which is always the case if they load ReShade, to decide whether to call it or CreateDXGIFactory1
 
-	Flags |= DXGI_CREATE_FACTORY_DEBUG;
 
 
 	if (trampoline == nullptr)
