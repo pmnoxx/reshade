@@ -1797,8 +1797,14 @@ namespace reshade
 		/// </remarks>
 		reshade_overlay_technique,
 
+		/// <summary>
+		/// Called when XInputGetState is called to get the state of a gamepad.
+		/// <para>Callback function signature: <c>void (DWORD dwUserIndex, XINPUT_STATE *pState)</c></para>
+		/// </summary>
+		xinput_get_state = 102,
+
 #if RESHADE_ADDON
-		max = 102 // Last value used internally by ReShade to determine number of events in this enum
+		max = 103 // Last value used internally by ReShade to determine number of events in this enum
 #endif
 	};
 
@@ -1947,4 +1953,5 @@ namespace reshade
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_overlay_uniform_variable, bool, api::effect_runtime *runtime, api::effect_uniform_variable variable);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_overlay_technique, bool, api::effect_runtime *runtime, api::effect_technique technique);
+	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::xinput_get_state, bool, uint32_t dwUserIndex, void *pState);
 }

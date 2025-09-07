@@ -290,6 +290,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
 					reshade::hooks::register_module(get_system_path() / L"dinput.dll");
 					reshade::hooks::register_module(get_system_path() / L"dinput8.dll");
+					reshade::hooks::register_module(get_system_path() / L"xinput1_1.dll");
+					reshade::hooks::register_module(get_system_path() / L"xinput1_2.dll");
+					reshade::hooks::register_module(get_system_path() / L"xinput1_3.dll");
+					reshade::hooks::register_module(get_system_path() / L"xinput1_4.dll");
+					reshade::hooks::register_module(get_system_path() / L"xinput9_1_0.dll");
 				}
 
 #if RESHADE_ADDON == 1

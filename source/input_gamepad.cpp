@@ -4,10 +4,15 @@
  */
 
 #include "input_gamepad.hpp"
+#include "hook_manager.hpp"
 #include <cassert>
 #include <shared_mutex>
 #include <Windows.h>
 #include <Xinput.h>
+
+#if RESHADE_ADDON
+#include "addon_manager.hpp"
+#endif
 
 static std::shared_mutex s_xinput_mutex;
 static std::weak_ptr<reshade::input_gamepad> s_xinput_instance;
@@ -126,3 +131,29 @@ void reshade::input_gamepad::next_frame()
 
 	_last_packet_num = xstate.dwPacketNumber;
 }
+
+#if RESHADE_ADDON
+
+DWORD nextPacketNumber = 1;
+
+extern "C" DWORD WINAPI HookXInputGetState(DWORD dwUserIndex, XINPUT_STATE *pState)
+{
+	static const auto trampoline = reshade::hooks::call(HookXInputGetState);
+	const DWORD result = trampoline(dwUserIndex, pState);
+
+	if (reshade::invoke_addon_event<reshade::addon_event::xinput_get_state>(static_cast<uint32_t>(dwUserIndex), static_cast<void*>(pState))) {
+		pState->dwPacketNumber = nextPacketNumber == 1 ? 1 : nextPacketNumber - 1;
+	} else {
+		pState->dwPacketNumber = nextPacketNumber;
+		nextPacketNumber++;
+	}
+
+	return result;
+}
+#else
+extern "C" DWORD WINAPI HookXInputGetState(DWORD dwUserIndex, XINPUT_STATE *pState)
+{
+	static const auto trampoline = reshade::hooks::call(HookXInputGetState);
+	return trampoline(dwUserIndex, pState);
+}
+#endif

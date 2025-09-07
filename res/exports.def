@@ -411,7 +411,7 @@ EXPORTS
 	glVertex4sv PRIVATE
 	glVertexPointer PRIVATE
 	glViewport PRIVATE
-	
+
 	wglChoosePixelFormat PRIVATE
 	wglCopyContext PRIVATE
 	wglCreateContext PRIVATE
@@ -479,6 +479,10 @@ EXPORTS
 	SetWindowsHookExA = HookSetWindowsHookExA PRIVATE
 	SetWindowsHookExW = HookSetWindowsHookExW PRIVATE
 	UnhookWindowsHookEx = HookUnhookWindowsHookEx PRIVATE
+
+	; xinput1_3.dll
+	; xinput1_4.dll
+	XInputGetState = HookXInputGetState PRIVATE
 
 	; ws2_32.dll (Uses ordinals in ws2_32.lib for most exports)
 	send = HookSend PRIVATE
