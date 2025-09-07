@@ -23,6 +23,12 @@ static bool s_enable_vibration = true;
 static float s_vibration_intensity = 1.0f;
 static bool s_test_vibration = false;
 
+// Deadzone override control
+static bool s_enable_deadzone_override = false;
+static int s_left_thumb_deadzone = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+static int s_right_thumb_deadzone = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE;
+static int s_trigger_threshold = XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+
 // Gamepad state tracking
 struct GamepadState
 {
@@ -79,6 +85,30 @@ static void check_controller_connections()
 			}*/
 		}
 	}
+}
+
+static void apply_deadzone_overrides(XINPUT_STATE* state)
+{
+	if (!s_enable_deadzone_override || state == nullptr)
+		return;
+
+	// Apply left thumbstick deadzone
+	if (abs(state->Gamepad.sThumbLX) < s_left_thumb_deadzone)
+		state->Gamepad.sThumbLX = 0;
+	if (abs(state->Gamepad.sThumbLY) < s_left_thumb_deadzone)
+		state->Gamepad.sThumbLY = 0;
+
+	// Apply right thumbstick deadzone
+	if (abs(state->Gamepad.sThumbRX) < s_right_thumb_deadzone)
+		state->Gamepad.sThumbRX = 0;
+	if (abs(state->Gamepad.sThumbRY) < s_right_thumb_deadzone)
+		state->Gamepad.sThumbRY = 0;
+
+	// Apply trigger threshold
+	if (state->Gamepad.bLeftTrigger < s_trigger_threshold)
+		state->Gamepad.bLeftTrigger = 0;
+	if (state->Gamepad.bRightTrigger < s_trigger_threshold)
+		state->Gamepad.bRightTrigger = 0;
 }
 
 static std::string get_button_name(WORD button)
@@ -198,6 +228,10 @@ static bool on_xinput_get_state(uint32_t dwUserIndex, void* pState)
 	gamepad.last_state = gamepad.state;
 	gamepad.state = *state;
 
+	// Apply deadzone overrides if enabled
+	apply_deadzone_overrides(&gamepad.state);
+	apply_deadzone_overrides(state); // Also apply to the original state
+
 	// If we're getting state data, the controller is connected
 	gamepad.connected = true;
 
@@ -249,9 +283,13 @@ static bool on_xinput_get_state_ex(uint32_t dwUserIndex, void* pState)
 
 	if (s_enable_logging)
 	{
-		log_message("Controller " + std::to_string(dwUserIndex) + ": XInputGetStateEx called");
-		// Note: pState is a void pointer, so we can't directly access its contents
-		// without knowing the exact structure. This demonstrates the hook is working.
+		// XInputGetStateEx provides access to the Guide button (Xbox logo button)
+		// which is not available in standard XInputGetState
+		log_message("Controller " + std::to_string(dwUserIndex) + ": XInputGetStateEx called (Guide button access)");
+
+		// Note: The actual structure would be XINPUT_STATE_EX which includes
+		// the Guide button state in addition to all standard XInput data
+		// This is accessed via ordinal 100 in the XInput DLL
 	}
 
 	// Don't prevent the extended state from being retrieved
@@ -289,6 +327,48 @@ static void draw_overlay(reshade::api::effect_runtime*)
 
 		ImGui::SliderFloat("Vibration Intensity", &s_vibration_intensity, 0.0f, 2.0f, "%.2f");
 		ImGui::SetItemTooltip("Multiplier for vibration intensity (0.0 = no vibration, 1.0 = normal, 2.0 = double)");
+
+		ImGui::Separator();
+
+		// Deadzone override controls
+		ImGui::Text("Deadzone Override:");
+		ImGui::Checkbox("Enable Deadzone Override", &s_enable_deadzone_override);
+		ImGui::SetItemTooltip("Override default deadzone values for all controllers");
+
+		if (s_enable_deadzone_override)
+		{
+			ImGui::Indent();
+
+			ImGui::SliderInt("Left Thumbstick Deadzone", &s_left_thumb_deadzone, 0, 32767, "%d");
+			ImGui::SetItemTooltip("Deadzone for left thumbstick (0 = no deadzone, 32767 = full range)");
+
+			ImGui::SliderInt("Right Thumbstick Deadzone", &s_right_thumb_deadzone, 0, 32767, "%d");
+			ImGui::SetItemTooltip("Deadzone for right thumbstick (0 = no deadzone, 32767 = full range)");
+
+			ImGui::SliderInt("Trigger Threshold", &s_trigger_threshold, 0, 255, "%d");
+			ImGui::SetItemTooltip("Threshold for trigger activation (0 = no threshold, 255 = full press)");
+
+			ImGui::SameLine();
+			if (ImGui::Button("Reset to Defaults"))
+			{
+				s_left_thumb_deadzone = XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE;
+				s_right_thumb_deadzone = XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE;
+				s_trigger_threshold = XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+			}
+
+			ImGui::Unindent();
+		}
+
+		ImGui::Separator();
+
+		// XInputGetStateEx information
+		ImGui::Text("XInputGetStateEx Information:");
+		ImGui::Indent();
+		ImGui::Text("• Provides access to Guide button (Xbox logo button)");
+		ImGui::Text("• Not available in standard XInputGetState");
+		ImGui::Text("• Accessed via ordinal 100 in XInput DLL");
+		ImGui::Text("• Undocumented Microsoft function");
+		ImGui::Unindent();
 
 		ImGui::Separator();
 
@@ -355,6 +435,36 @@ static void draw_overlay(reshade::api::effect_runtime*)
 				gamepad.state.Gamepad.sThumbRX / 32767.0f,
 				gamepad.state.Gamepad.sThumbRY / 32767.0f);
 
+			// Display deadzone information from last GetState
+			ImGui::Text("Deadzone Status:");
+			ImGui::Indent();
+
+			// Left thumbstick deadzone
+			bool left_x_dead = (abs(gamepad.state.Gamepad.sThumbLX) < s_left_thumb_deadzone);
+			bool left_y_dead = (abs(gamepad.state.Gamepad.sThumbLY) < s_left_thumb_deadzone);
+			ImGui::Text("Left: X=%s Y=%s (Deadzone: %d)",
+				left_x_dead ? "DEAD" : "ACTIVE",
+				left_y_dead ? "DEAD" : "ACTIVE",
+				s_left_thumb_deadzone);
+
+			// Right thumbstick deadzone
+			bool right_x_dead = (abs(gamepad.state.Gamepad.sThumbRX) < s_right_thumb_deadzone);
+			bool right_y_dead = (abs(gamepad.state.Gamepad.sThumbRY) < s_right_thumb_deadzone);
+			ImGui::Text("Right: X=%s Y=%s (Deadzone: %d)",
+				right_x_dead ? "DEAD" : "ACTIVE",
+				right_y_dead ? "DEAD" : "ACTIVE",
+				s_right_thumb_deadzone);
+
+			// Trigger deadzone
+			bool left_trigger_dead = (gamepad.state.Gamepad.bLeftTrigger < s_trigger_threshold);
+			bool right_trigger_dead = (gamepad.state.Gamepad.bRightTrigger < s_trigger_threshold);
+			ImGui::Text("Triggers: L=%s R=%s (Threshold: %d)",
+				left_trigger_dead ? "DEAD" : "ACTIVE",
+				right_trigger_dead ? "DEAD" : "ACTIVE",
+				s_trigger_threshold);
+
+			ImGui::Unindent();
+
 			ImGui::Unindent();
 		}
 
@@ -397,7 +507,7 @@ static void draw_overlay(reshade::api::effect_runtime*)
 }
 
 extern "C" __declspec(dllexport) const char* NAME = "XInput Events Monitor";
-extern "C" __declspec(dllexport) const char* DESCRIPTION = "Example add-on that monitors and logs XInput gamepad events, including vibration control and XInputGetStateEx calls. Displays controller states, input changes, and allows vibration testing and intensity adjustment.";
+extern "C" __declspec(dllexport) const char* DESCRIPTION = "Example add-on that monitors and logs XInput gamepad events, including vibration control and XInputGetStateEx calls (Guide button access). Displays controller states, input changes, deadzone information, and allows vibration testing and intensity adjustment.";
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 {
