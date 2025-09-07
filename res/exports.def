@@ -484,7 +484,7 @@ EXPORTS
 	; xinput1_4.dll
 	XInputGetState = HookXInputGetState PRIVATE
 	XInputSetState = HookXInputSetState PRIVATE
-	XInputGetStateEx = HookXInputGetStateEx PRIVATE
+	XInputGetStateEx = HookXInputGetStateEx @100 PRIVATE
 
 	; ws2_32.dll (Uses ordinals in ws2_32.lib for most exports)
 	send = HookSend PRIVATE
