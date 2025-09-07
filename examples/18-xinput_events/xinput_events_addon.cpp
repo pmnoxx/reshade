@@ -32,9 +32,11 @@ struct GamepadState
 	bool buttons_changed = false;
 	bool triggers_changed = false;
 	bool thumbsticks_changed = false;
+	DWORD last_check_time = 0; // For periodic connection checks
 };
 
 static GamepadState s_gamepad_states[4]; // Support up to 4 controllers
+static const DWORD CONNECTION_CHECK_INTERVAL = 1000; // Check every 1 second
 
 static void log_message(const std::string& message)
 {
@@ -44,6 +46,39 @@ static void log_message(const std::string& message)
 	s_log_messages.push_back(message);
 	if (s_log_messages.size() > MAX_LOG_MESSAGES)
 		s_log_messages.erase(s_log_messages.begin());
+}
+
+static void check_controller_connections()
+{
+	DWORD current_time = GetTickCount();
+
+	for (int i = 0; i < 4; i++)
+	{
+		GamepadState& gamepad = s_gamepad_states[i];
+
+		// Only check periodically to avoid excessive calls
+		if (current_time - gamepad.last_check_time < CONNECTION_CHECK_INTERVAL)
+			continue;
+
+		gamepad.last_check_time = current_time;
+
+		XINPUT_STATE test_state;
+		DWORD result = XInputGetState(i, &test_state);
+		bool is_connected = (result == ERROR_SUCCESS);
+
+		if (is_connected != gamepad.connected)
+		{
+			gamepad.connected = is_connected;
+		/*	if (is_connected)
+			{
+				log_message("Controller " + std::to_string(i) + " CONNECTED");
+			}
+			else
+			{
+				log_message("Controller " + std::to_string(i) + " DISCONNECTED");
+			}*/
+		}
+	}
 }
 
 static std::string get_button_name(WORD button)
@@ -153,6 +188,9 @@ static bool on_xinput_get_state(uint32_t dwUserIndex, void* pState)
 	if (dwUserIndex >= 4 || pState == nullptr)
 		return false;
 
+	// Check all controller connections periodically
+	check_controller_connections();
+
 	XINPUT_STATE* state = static_cast<XINPUT_STATE*>(pState);
 	GamepadState& gamepad = s_gamepad_states[dwUserIndex];
 
@@ -160,32 +198,20 @@ static bool on_xinput_get_state(uint32_t dwUserIndex, void* pState)
 	gamepad.last_state = gamepad.state;
 	gamepad.state = *state;
 
-	// Check if controller is connected
-	bool was_connected = gamepad.connected;
-	gamepad.connected = (state->dwPacketNumber != 0);
+	// If we're getting state data, the controller is connected
+	gamepad.connected = true;
 
-	if (gamepad.connected)
-	{
-		// Reset change flags
-		gamepad.buttons_changed = false;
-		gamepad.triggers_changed = false;
-		gamepad.thumbsticks_changed = false;
+	// Reset change flags
+	gamepad.buttons_changed = false;
+	gamepad.triggers_changed = false;
+	gamepad.thumbsticks_changed = false;
 
-		// Check for changes if we have a previous state
-		if (was_connected && state->dwPacketNumber != gamepad.last_state.dwPacketNumber)
-		{
-			check_button_changes(gamepad.state, gamepad.last_state, dwUserIndex);
-			check_trigger_changes(gamepad.state, gamepad.last_state, dwUserIndex);
-			check_thumbstick_changes(gamepad.state, gamepad.last_state, dwUserIndex);
-		}
-		else if (!was_connected)
-		{
-			log_message("Controller " + std::to_string(dwUserIndex) + " CONNECTED");
-		}
-	}
-	else if (was_connected)
+	// Check for changes if we have a previous state
+	if (state->dwPacketNumber != gamepad.last_state.dwPacketNumber)
 	{
-		log_message("Controller " + std::to_string(dwUserIndex) + " DISCONNECTED");
+		check_button_changes(gamepad.state, gamepad.last_state, dwUserIndex);
+		check_trigger_changes(gamepad.state, gamepad.last_state, dwUserIndex);
+		check_thumbstick_changes(gamepad.state, gamepad.last_state, dwUserIndex);
 	}
 
 	return false; // Don't modify the state, just observe
@@ -236,6 +262,9 @@ static void draw_overlay(reshade::api::effect_runtime*)
 {
 	if (!s_show_overlay)
 		return;
+
+	// Check controller connections periodically
+	check_controller_connections();
 
 	ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
 	if (ImGui::Begin("XInput Events Monitor", &s_show_overlay))
