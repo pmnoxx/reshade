@@ -5,19 +5,22 @@ This example addon demonstrates how to monitor and log XInput gamepad events in 
 ## Features
 
 - **Real-time Gamepad Monitoring**: Tracks all XInput controller events including button presses, releases, trigger movements, and thumbstick changes
+- **Vibration Control**: Monitors and controls XInput vibration output with intensity adjustment
 - **Multi-Controller Support**: Monitors up to 4 controllers simultaneously
 - **Visual Overlay**: Displays current controller states and input changes in a ReShade overlay
 - **Event Logging**: Logs all input events with timestamps and controller identification
 - **Connection Status**: Shows which controllers are connected/disconnected
+- **Vibration Testing**: Built-in vibration test functionality for connected controllers
 
 ## How It Works
 
-The addon registers for the `reshade::addon_event::xinput_get_state` event, which is called whenever the game queries the state of an XInput controller. The addon:
+The addon registers for both `reshade::addon_event::xinput_get_state` and `reshade::addon_event::xinput_set_state` events, which are called whenever the game queries or modifies the state of an XInput controller. The addon:
 
-1. **Intercepts XInput calls**: Captures all `XInputGetState` calls made by the game
+1. **Intercepts XInput calls**: Captures all `XInputGetState` and `XInputSetState` calls made by the game
 2. **Tracks state changes**: Compares current state with previous state to detect changes
-3. **Logs events**: Records button presses/releases, trigger movements, and thumbstick changes
-4. **Displays overlay**: Shows real-time controller status and input information
+3. **Logs events**: Records button presses/releases, trigger movements, thumbstick changes, and vibration commands
+4. **Controls vibration**: Can modify or block vibration output with intensity adjustment
+5. **Displays overlay**: Shows real-time controller status and input information
 
 ## Usage
 
@@ -34,7 +37,8 @@ The addon registers for the `reshade::addon_event::xinput_get_state` event, whic
 - **Current Button States**: Displays all currently pressed buttons
 - **Trigger Values**: Shows left and right trigger positions as percentages
 - **Thumbstick Values**: Displays normalized thumbstick positions (-1.0 to 1.0)
-- **Event Log**: Scrollable list of recent input events
+- **Vibration Controls**: Enable/disable vibration, adjust intensity, and test vibration
+- **Event Log**: Scrollable list of recent input events including vibration commands
 - **Logging Toggle**: Enable/disable event logging
 - **Clear Log**: Clear the event log
 
@@ -48,6 +52,15 @@ static bool on_xinput_get_state(uint32_t dwUserIndex, void* pState)
     // Track state changes
     // Log events
     return false; // Don't modify the state
+}
+
+static bool on_xinput_set_state(uint32_t dwUserIndex, void* pVibration)
+{
+    // Intercept XInputSetState calls
+    // Log vibration commands
+    // Apply intensity multiplier
+    // Return true to block vibration, false to allow
+    return !s_enable_vibration;
 }
 ```
 
@@ -84,9 +97,11 @@ This example is included in the ReShade Examples solution. To build:
 
 - **Input Debugging**: Debug gamepad input issues in games
 - **Controller Testing**: Test controller functionality and responsiveness
+- **Vibration Control**: Adjust or disable game vibration for comfort
 - **Input Recording**: Log input sequences for analysis
 - **Accessibility**: Monitor controller input for accessibility tools
 - **Game Development**: Understand how games handle XInput
+- **Vibration Analysis**: Study how games use vibration for feedback
 
 ## Notes
 

@@ -216,6 +216,22 @@ static bool on_xinput_set_state(uint32_t dwUserIndex, void* pVibration)
 	return !s_enable_vibration;
 }
 
+static bool on_xinput_get_state_ex(uint32_t dwUserIndex, void* pState)
+{
+	if (dwUserIndex >= 4 || pState == nullptr)
+		return false;
+
+	if (s_enable_logging)
+	{
+		log_message("Controller " + std::to_string(dwUserIndex) + ": XInputGetStateEx called");
+		// Note: pState is a void pointer, so we can't directly access its contents
+		// without knowing the exact structure. This demonstrates the hook is working.
+	}
+
+	// Don't prevent the extended state from being retrieved
+	return false;
+}
+
 static void draw_overlay(reshade::api::effect_runtime*)
 {
 	if (!s_show_overlay)
@@ -352,7 +368,7 @@ static void draw_overlay(reshade::api::effect_runtime*)
 }
 
 extern "C" __declspec(dllexport) const char* NAME = "XInput Events Monitor";
-extern "C" __declspec(dllexport) const char* DESCRIPTION = "Example add-on that monitors and logs XInput gamepad events, including vibration control. Displays controller states, input changes, and allows vibration testing and intensity adjustment.";
+extern "C" __declspec(dllexport) const char* DESCRIPTION = "Example add-on that monitors and logs XInput gamepad events, including vibration control and XInputGetStateEx calls. Displays controller states, input changes, and allows vibration testing and intensity adjustment.";
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 {
@@ -363,6 +379,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 			return FALSE;
 		reshade::register_event<reshade::addon_event::xinput_get_state>(on_xinput_get_state);
 		reshade::register_event<reshade::addon_event::xinput_set_state>(on_xinput_set_state);
+		reshade::register_event<reshade::addon_event::xinput_get_state_ex>(on_xinput_get_state_ex);
 		reshade::register_overlay(nullptr, draw_overlay);
 		break;
 	case DLL_PROCESS_DETACH:

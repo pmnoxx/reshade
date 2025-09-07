@@ -172,6 +172,17 @@ extern "C" DWORD WINAPI HookXInputSetState(DWORD dwUserIndex, XINPUT_VIBRATION *
 
 	return trampoline(dwUserIndex, pVibration);
 }
+
+extern "C" DWORD WINAPI HookXInputGetStateEx(DWORD dwUserIndex, void *pState)
+{
+	static const auto trampoline = reshade::hooks::call(HookXInputGetStateEx);
+
+	if (reshade::invoke_addon_event<reshade::addon_event::xinput_get_state_ex>(static_cast<uint32_t>(dwUserIndex), pState)) {
+		return ERROR_SUCCESS; // Prevent the extended state from being retrieved
+	}
+
+	return trampoline(dwUserIndex, pState);
+}
 #else
 extern "C" DWORD WINAPI HookXInputGetState(DWORD dwUserIndex, XINPUT_STATE *pState)
 {
@@ -183,5 +194,11 @@ extern "C" DWORD WINAPI HookXInputSetState(DWORD dwUserIndex, XINPUT_VIBRATION *
 {
 	static const auto trampoline = reshade::hooks::call(HookXInputSetState);
 	return trampoline(dwUserIndex, pVibration);
+}
+
+extern "C" DWORD WINAPI HookXInputGetStateEx(DWORD dwUserIndex, void *pState)
+{
+	static const auto trampoline = reshade::hooks::call(HookXInputGetStateEx);
+	return trampoline(dwUserIndex, pState);
 }
 #endif
