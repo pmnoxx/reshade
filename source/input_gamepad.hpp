@@ -61,9 +61,18 @@ namespace reshade
 		/// </summary>
 		void next_frame();
 
+		/// <summary>
+		/// Sets the vibration state of the gamepad.
+		/// </summary>
+		/// <param name="left_motor">Left motor speed (0-65535)</param>
+		/// <param name="right_motor">Right motor speed (0-65535)</param>
+		/// <returns>True if successful, false otherwise</returns>
+		bool set_vibration(uint16_t left_motor, uint16_t right_motor) const;
+
 	private:
 		void *_xinput_module = nullptr;
 		void *_xinput_get_state = nullptr;
+		void *_xinput_set_state = nullptr;
 
 		uint16_t _buttons = 0;
 		uint16_t _last_buttons = 0;

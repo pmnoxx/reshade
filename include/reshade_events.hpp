@@ -1803,8 +1803,17 @@ namespace reshade
 		/// </summary>
 		xinput_get_state = 102,
 
+		/// <summary>
+		/// Called when XInputSetState is called to set the vibration state of a gamepad.
+		/// <para>Callback function signature: <c>bool (DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)</c></para>
+		/// </summary>
+		/// <remarks>
+		/// To prevent the vibration from being sent to the controller, return <see langword="true"/>, otherwise return <see langword="false"/>.
+		/// </remarks>
+		xinput_set_state = 103,
+
 #if RESHADE_ADDON
-		max = 103 // Last value used internally by ReShade to determine number of events in this enum
+		max = 104 // Last value used internally by ReShade to determine number of events in this enum
 #endif
 	};
 
@@ -1954,4 +1963,5 @@ namespace reshade
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_overlay_uniform_variable, bool, api::effect_runtime *runtime, api::effect_uniform_variable variable);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::reshade_overlay_technique, bool, api::effect_runtime *runtime, api::effect_technique technique);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::xinput_get_state, bool, uint32_t dwUserIndex, void *pState);
+	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::xinput_set_state, bool, uint32_t dwUserIndex, void *pVibration);
 }

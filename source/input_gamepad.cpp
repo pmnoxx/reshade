@@ -20,7 +20,9 @@ static std::weak_ptr<reshade::input_gamepad> s_xinput_instance;
 reshade::input_gamepad::input_gamepad(void *module) : _xinput_module(module)
 {
 	_xinput_get_state = reinterpret_cast<void *>(GetProcAddress(static_cast<HMODULE>(_xinput_module), "XInputGetState"));
+	_xinput_set_state = reinterpret_cast<void *>(GetProcAddress(static_cast<HMODULE>(_xinput_module), "XInputSetState"));
 	assert(_xinput_get_state != nullptr);
+	assert(_xinput_set_state != nullptr);
 }
 reshade::input_gamepad::~input_gamepad()
 {
@@ -132,6 +134,15 @@ void reshade::input_gamepad::next_frame()
 	_last_packet_num = xstate.dwPacketNumber;
 }
 
+bool reshade::input_gamepad::set_vibration(uint16_t left_motor, uint16_t right_motor) const
+{
+	XINPUT_VIBRATION vibration = {};
+	vibration.wLeftMotorSpeed = left_motor;
+	vibration.wRightMotorSpeed = right_motor;
+
+	return static_cast<decltype(&XInputSetState)>(_xinput_set_state)(0, &vibration) == ERROR_SUCCESS;
+}
+
 #if RESHADE_ADDON
 
 DWORD nextPacketNumber = 1;
@@ -150,10 +161,27 @@ extern "C" DWORD WINAPI HookXInputGetState(DWORD dwUserIndex, XINPUT_STATE *pSta
 
 	return result;
 }
+
+extern "C" DWORD WINAPI HookXInputSetState(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
+{
+	static const auto trampoline = reshade::hooks::call(HookXInputSetState);
+
+	if (reshade::invoke_addon_event<reshade::addon_event::xinput_set_state>(static_cast<uint32_t>(dwUserIndex), static_cast<void*>(pVibration))) {
+		return ERROR_SUCCESS; // Prevent the vibration from being sent
+	}
+
+	return trampoline(dwUserIndex, pVibration);
+}
 #else
 extern "C" DWORD WINAPI HookXInputGetState(DWORD dwUserIndex, XINPUT_STATE *pState)
 {
 	static const auto trampoline = reshade::hooks::call(HookXInputGetState);
 	return trampoline(dwUserIndex, pState);
+}
+
+extern "C" DWORD WINAPI HookXInputSetState(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
+{
+	static const auto trampoline = reshade::hooks::call(HookXInputSetState);
+	return trampoline(dwUserIndex, pVibration);
 }
 #endif

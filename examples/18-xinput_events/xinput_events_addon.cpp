@@ -10,11 +10,18 @@
 #include <string>
 #include <vector>
 #include <cstring>
+#include <thread>
+#include <chrono>
 
 static bool s_enable_logging = true;
 static bool s_show_overlay = true;
 static std::vector<std::string> s_log_messages;
 static const size_t MAX_LOG_MESSAGES = 50;
+
+// Vibration control
+static bool s_enable_vibration = true;
+static float s_vibration_intensity = 1.0f;
+static bool s_test_vibration = false;
 
 // Gamepad state tracking
 struct GamepadState
@@ -184,6 +191,31 @@ static bool on_xinput_get_state(uint32_t dwUserIndex, void* pState)
 	return false; // Don't modify the state, just observe
 }
 
+static bool on_xinput_set_state(uint32_t dwUserIndex, void* pVibration)
+{
+	if (dwUserIndex >= 4 || pVibration == nullptr)
+		return false;
+
+	XINPUT_VIBRATION* vibration = static_cast<XINPUT_VIBRATION*>(pVibration);
+
+	if (s_enable_logging)
+	{
+		log_message("Controller " + std::to_string(dwUserIndex) +
+			": VIBRATION SET - Left=" + std::to_string(vibration->wLeftMotorSpeed) +
+			" Right=" + std::to_string(vibration->wRightMotorSpeed));
+	}
+
+	// Apply vibration intensity if enabled
+	if (s_enable_vibration && s_vibration_intensity != 1.0f)
+	{
+		vibration->wLeftMotorSpeed = static_cast<WORD>(vibration->wLeftMotorSpeed * s_vibration_intensity);
+		vibration->wRightMotorSpeed = static_cast<WORD>(vibration->wRightMotorSpeed * s_vibration_intensity);
+	}
+
+	// If vibration is disabled, prevent it from being sent
+	return !s_enable_vibration;
+}
+
 static void draw_overlay(reshade::api::effect_runtime*)
 {
 	if (!s_show_overlay)
@@ -198,6 +230,20 @@ static void draw_overlay(reshade::api::effect_runtime*)
 		{
 			s_log_messages.clear();
 		}
+
+		ImGui::Separator();
+
+		// Vibration controls
+		ImGui::Text("Vibration Controls:");
+		ImGui::Checkbox("Enable Vibration", &s_enable_vibration);
+		ImGui::SameLine();
+		if (ImGui::Button("Test Vibration"))
+		{
+			s_test_vibration = true;
+		}
+
+		ImGui::SliderFloat("Vibration Intensity", &s_vibration_intensity, 0.0f, 2.0f, "%.2f");
+		ImGui::SetItemTooltip("Multiplier for vibration intensity (0.0 = no vibration, 1.0 = normal, 2.0 = double)");
 
 		ImGui::Separator();
 
@@ -279,10 +325,34 @@ static void draw_overlay(reshade::api::effect_runtime*)
 		ImGui::EndChild();
 	}
 	ImGui::End();
+
+	// Handle test vibration
+	if (s_test_vibration)
+	{
+		s_test_vibration = false;
+		// Test vibration on all connected controllers
+		for (int i = 0; i < 4; i++)
+		{
+			if (s_gamepad_states[i].connected)
+			{
+				XINPUT_VIBRATION vibration = {};
+				vibration.wLeftMotorSpeed = static_cast<WORD>(32767 * s_vibration_intensity);
+				vibration.wRightMotorSpeed = static_cast<WORD>(32767 * s_vibration_intensity);
+				XInputSetState(i, &vibration);
+
+				// Stop vibration after a short delay
+				std::thread([i]() {
+					std::this_thread::sleep_for(std::chrono::milliseconds(500));
+					XINPUT_VIBRATION stop_vibration = {};
+					XInputSetState(i, &stop_vibration);
+				}).detach();
+			}
+		}
+	}
 }
 
 extern "C" __declspec(dllexport) const char* NAME = "XInput Events Monitor";
-extern "C" __declspec(dllexport) const char* DESCRIPTION = "Example add-on that monitors and logs XInput gamepad events, displaying controller states and input changes in real-time.";
+extern "C" __declspec(dllexport) const char* DESCRIPTION = "Example add-on that monitors and logs XInput gamepad events, including vibration control. Displays controller states, input changes, and allows vibration testing and intensity adjustment.";
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 {
@@ -292,6 +362,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		if (!reshade::register_addon(hModule))
 			return FALSE;
 		reshade::register_event<reshade::addon_event::xinput_get_state>(on_xinput_get_state);
+		reshade::register_event<reshade::addon_event::xinput_set_state>(on_xinput_set_state);
 		reshade::register_overlay(nullptr, draw_overlay);
 		break;
 	case DLL_PROCESS_DETACH:
