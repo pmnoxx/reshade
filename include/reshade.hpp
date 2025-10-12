@@ -74,8 +74,27 @@ namespace reshade { namespace internal
 					if (GetProcAddress(modules[i], "ReShadeRegisterAddon") &&
 						GetProcAddress(modules[i], "ReShadeUnregisterAddon"))
 					{
-						handle = modules[i];
-						break;
+						// Skip modules that have ImGui support - prefer modules without ImGui
+						FARPROC imgui_func = GetProcAddress(modules[i], "ReShadeGetImGuiFunctionTable");
+						if (imgui_func == nullptr)
+						{
+							handle = modules[i];
+							break;
+						}
+					}
+				}
+
+				// If no module without ImGui was found, fall back to any ReShade module
+				if (handle == nullptr)
+				{
+					for (DWORD i = 0; i < num / sizeof(HMODULE); ++i)
+					{
+						if (GetProcAddress(modules[i], "ReShadeRegisterAddon") &&
+							GetProcAddress(modules[i], "ReShadeUnregisterAddon"))
+						{
+							handle = modules[i];
+							break;
+						}
 					}
 				}
 			}
@@ -266,9 +285,11 @@ namespace reshade
 #if defined(IMGUI_VERSION_NUM)
 		const auto imgui_func = reinterpret_cast<const imgui_function_table *(*)(uint32_t)>(
 			GetProcAddress(reshade_module, "ReShadeGetImGuiFunctionTable"));
-		// Check that the ReShade module was built with Dear ImGui support and supports the used version
-		if (imgui_func == nullptr || !(imgui_function_table_instance() = imgui_func(IMGUI_VERSION_NUM)))
-			return false;
+		// ImGui support is optional - only initialize if available
+		if (imgui_func != nullptr)
+		{
+			imgui_function_table_instance() = imgui_func(IMGUI_VERSION_NUM);
+		}
 #endif
 
 		return true;
