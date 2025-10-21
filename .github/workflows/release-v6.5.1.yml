@@ -1,0 +1,135 @@
+name: Release v6.5.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub release'
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Checkout v6.5.1 tag
+        run: |
+          git checkout v6.5.1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install Jinja2 glad
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init --recursive
+
+      - name: Build ReShade (32-bit)
+        run: |
+          msbuild ReShade.sln /p:Configuration=Release /p:Platform=32-bit /m /nologo
+
+      - name: Build ReShade (64-bit)
+        run: |
+          msbuild ReShade.sln /p:Configuration=Release /p:Platform=64-bit /m /nologo
+
+      - name: Build FXC and Injector tools
+        run: |
+          msbuild ReShade.sln /p:Configuration=Release /p:Platform=32-bit /t:FXC,Injector /m /nologo
+          msbuild ReShade.sln /p:Configuration=Release /p:Platform=64-bit /t:FXC,Injector /m /nologo
+
+      - name: Create release directory
+        run: |
+          mkdir release
+          mkdir release\32-bit
+          mkdir release\64-bit
+
+      - name: Copy 32-bit files
+        run: |
+          copy "bin\Win32\Release\ReShade32.dll" "release\32-bit\"
+          copy "bin\Win32\Release\ReShade32.pdb" "release\32-bit\"
+          copy "bin\Win32\Release\fxc.exe" "release\32-bit\"
+          copy "bin\Win32\Release\inject.exe" "release\32-bit\"
+
+      - name: Copy 64-bit files
+        run: |
+          copy "bin\x64\Release\ReShade64.dll" "release\64-bit\"
+          copy "bin\x64\Release\ReShade64.pdb" "release\64-bit\"
+          copy "bin\x64\Release\fxc.exe" "release\64-bit\"
+          copy "bin\x64\Release\inject.exe" "release\64-bit\"
+
+      - name: Create release archive
+        run: |
+          $ARCHIVE_NAME = "ReShade_v6.5.1.zip"
+          
+          # Create a zip file with the release
+          Compress-Archive -Path "release\*" -DestinationPath $ARCHIVE_NAME
+          
+          # Display file sizes
+          Write-Host "Release files:"
+          Get-ChildItem -Path "release" -Recurse | ForEach-Object {
+            $size = [math]::Round($_.Length / 1KB, 2)
+            Write-Host "  $($_.Name): $size KB"
+          }
+          
+          Write-Host "Created archive: $ARCHIVE_NAME"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $env:GITHUB_ENV
+
+      - name: Create GitHub Release
+        if: inputs.create_release == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v6.5.1
+          name: "ReShade v6.5.1"
+          body: |
+            ## ReShade v6.5.1
+            
+            This is an automated build of ReShade v6.5.1 from the upstream repository.
+            
+            ### What's included:
+            - **ReShade32.dll** - 32-bit version of ReShade
+            - **ReShade64.dll** - 64-bit version of ReShade
+            - **fxc.exe** - Shader compiler (both 32-bit and 64-bit)
+            - **inject.exe** - DLL injector (both 32-bit and 64-bit)
+            
+            ### Installation:
+            1. Download the appropriate DLL for your game (32-bit or 64-bit)
+            2. Copy the DLL to your game's executable directory
+            3. Use `inject.exe` to inject ReShade into running processes
+            
+            ### Source:
+            This release is automatically built from [crosire/reshade](https://github.com/crosire/reshade) tag v6.5.1.
+          files: |
+            ${{ env.ARCHIVE_NAME }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReShade-v6.5.1
+          path: |
+            release/
+            ${{ env.ARCHIVE_NAME }}
