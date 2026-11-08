@@ -71,6 +71,11 @@ namespace reshade { namespace internal
 
 				for (DWORD i = 0; i < num / sizeof(HMODULE); ++i)
 				{
+					// Display Commander re-exports Register/Unregister on proxy DLLs (e.g. dxgi.dll)
+					// for MFG Unlocker compatibility; never treat that module as ReShade.
+					if (GetProcAddress(modules[i], "GetDisplayCommanderState"))
+						continue;
+
 					if (GetProcAddress(modules[i], "ReShadeRegisterAddon") &&
 						GetProcAddress(modules[i], "ReShadeUnregisterAddon"))
 					{
